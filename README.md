@@ -1,2 +1,2 @@
 # neovim-config
-A configuration lf neovim on android termux
+A configuration of neovim on android termux
