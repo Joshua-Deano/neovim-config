@@ -1,0 +1,93 @@
+vim.g.mapleader, vim.g.maplocalleader = " ", " "
+local opt = vim.opt
+opt.number, opt.relativenumber, opt.clipboard = true, true, "unnamedplus"
+opt.termguicolors, opt.tabstop, opt.shiftwidth, opt.expandtab = true, 4, 4, true
+opt.ignorecase, opt.smartcase, opt.cursorline = true, true, true
+local undodir = vim.fn.stdpath("data") .. "/undo"
+if vim.fn.isdirectory(undodir) == 0 then vim.fn.mkdir(undodir, "p") end
+opt.undodir, opt.undofile = undodir, true
+local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+if not vim.loop.fs_stat(lazypath) then
+    vim.fn.system({ "git", "clone", "--filter=blob:none", "--branch=stable", "https://github.com/folke/lazy.nvim.git",
+        lazypath })
+end
+vim.opt.rtp:prepend(lazypath)
+require("lazy").setup({
+    ui = { border = "rounded" },
+    {
+        "rebelot/kanagawa.nvim",
+        priority = 1000,
+        config = function()
+            require("kanagawa").setup({
+                theme = "wave",
+                overrides = function(c)
+                    local t = c.theme.ui
+                    return { Pmenu = { fg = t.fg, bg = t.bg_p1 }, PmenuSel = { fg = "NONE", bg = t.bg_p2 }, FloatBorder = { fg = t.shade0, bg = "NONE" }, NormalFloat = { bg = "NONE" } }
+                end
+            })
+            vim.cmd.colorscheme("kanagawa")
+        end
+    },
+    { "folke/which-key.nvim", event = "VeryLazy", opts = { preset = "modern", win = { border = "rounded" } } },
+    {
+        "folke/snacks.nvim",
+        priority = 1000,
+        lazy = false,
+        opts = {
+            dashboard = { enabled = true },
+            indent = { enabled = true },
+            notifier = { enabled = true, style = "compact", border = "rounded", level = 3 },
+            terminal = { enabled = true, win = { border = "rounded" } },
+            picker = { enabled = true, win = { input = { border = "rounded" }, list = { border = "rounded" }, preview = { border = "rounded" } } }
+        }
+    },
+    { "nvim-lualine/lualine.nvim", event = "VeryLazy", dependencies = { "nvim-tree/nvim-web-devicons" }, opts = { options = { theme = 'kanagawa', globalstatus = true, icons_enabled = true, section_separators = { left = '', right = '' } } } },
+    {
+        "nvim-treesitter/nvim-treesitter",
+        event = { "BufReadPost", "BufNewFile" },
+        build = ":TSUpdate",
+        config = function()
+            local ok, configs = pcall(require, "nvim-treesitter.configs")
+            if ok then configs.setup({ ensure_installed = { "python", "lua", "vim", "bash", "sql" }, highlight = { enable = true } }) end
+        end
+    },
+    {
+        "neovim/nvim-lspconfig",
+        dependencies = { "williamboman/mason.nvim", "williamboman/mason-lspconfig.nvim", "hrsh7th/nvim-cmp", "hrsh7th/cmp-nvim-lsp" },
+        config = function()
+            require("mason").setup({ ui = { border = "rounded" } })
+            require("mason-lspconfig").setup({ ensure_installed = { "pyright", "bashls" } })
+            local caps = require('cmp_nvim_lsp').default_capabilities()
+            vim.lsp.config('pyright', { capabilities = caps })
+            vim.lsp.config('bashls', { capabilities = caps })
+            vim.lsp.config('lua_ls',
+                { capabilities = caps, cmd = { "lua-language-server" }, settings = { Lua = { diagnostics = { globals = { 'vim' } } } } })
+            vim.lsp.config('sqls',
+                { capabilities = caps, cmd = { "/data/data/com.termux/files/home/go/bin/sqls" }, root_dir = vim.uv.cwd() })
+            vim.lsp.enable({ "pyright", "bashls", "sqls", "lua_ls" })
+            vim.diagnostic.config({ virtual_text = false, signs = { text = { [1] = "", [2] = "", [3] = "", [4] = "" } }, float = { border = "rounded" } })
+            local cmp = require("cmp")
+            cmp.setup({
+                window = { completion = cmp.config.window.bordered({ border = "rounded" }), documentation = cmp.config.window.bordered({ border = "rounded" }) },
+                mapping = cmp.mapping.preset.insert({ ['<Tab>'] = cmp.mapping.confirm({ select = true }), ['<C-Space>'] =
+                cmp.mapping.complete() }),
+                sources = { { name = 'nvim_lsp' } }
+            })
+        end
+    },
+    { "stevearc/conform.nvim", event = { "BufWritePre" }, opts = { formatters_by_ft = { python = { "isort", "black" }, bash = { "beautysh" }, sql = { "sql_formatter" } }, format_on_save = { timeout_ms = 500, lsp_fallback = true } } },
+    { "windwp/nvim-autopairs", event = "InsertEnter",     opts = {} },
+})
+vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" },
+    { pattern = "*.sql", callback = function() vim.bo.filetype = "sql" end })
+vim.api.nvim_create_autocmd({ "BufEnter", "FileType" }, {
+    pattern = { "sh", "bash", "python", "lua", "sql" },
+    callback = function()
+        vim.cmd("syntax manual")
+        local lang = (vim.bo.filetype == "sh") and "bash" or vim.bo.filetype
+        if pcall(vim.treesitter.get_parser, 0, lang) then pcall(vim.treesitter.start) end
+    end,
+})
+pcall(require, "keymaps")
+vim.api.nvim_set_hl(0, "DiagnosticLineNrError", { fg = "#E82424", bold = true })
+vim.api.nvim_set_hl(0, "DiagnosticLineNrWarn", { fg = "#FF9E3B", bold = true })
